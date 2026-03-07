@@ -35,7 +35,8 @@ interface Stats {
   totalPurchases: number;
   paypalPurchases: number;
   robloxPurchases: number;
-  totalRevenue: number;
+  paypalRevenue: number;
+  robloxRevenue: number;
 }
 
 export default function AdminPage() {
@@ -47,7 +48,7 @@ export default function AdminPage() {
   const [activeTab, setActiveTab] = useState<'payments' | 'tickets' | 'scripts' | 'settings'>('payments');
   const [payments, setPayments] = useState<Payment[]>([]);
   const [tickets, setTickets] = useState<Ticket[]>([]);
-  const [stats, setStats] = useState<Stats>({ totalPurchases: 0, paypalPurchases: 0, robloxPurchases: 0, totalRevenue: 0 });
+  const [stats, setStats] = useState<Stats>({ totalPurchases: 0, paypalPurchases: 0, robloxPurchases: 0, paypalRevenue: 0, robloxRevenue: 0 });
   const [searchQuery, setSearchQuery] = useState('');
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   
@@ -361,7 +362,7 @@ export default function AdminPage() {
         </div>
 
         {/* Stats */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             <Card className="p-5 border-l-4 border-l-blue-500">
                 <p className="text-gray-500 text-xs uppercase font-bold tracking-wider">Total Orders</p>
                 <p className="text-2xl font-bold text-white mt-1">{stats.totalPurchases}</p>
@@ -369,14 +370,12 @@ export default function AdminPage() {
             <Card className="p-5 border-l-4 border-l-[#0070ba]">
                 <p className="text-gray-500 text-xs uppercase font-bold tracking-wider">PayPal</p>
                 <p className="text-2xl font-bold text-white mt-1">{stats.paypalPurchases}</p>
+                <p className="text-sm text-[#0070ba] font-semibold mt-1">${stats.paypalRevenue.toFixed(2)}</p>
             </Card>
             <Card className="p-5 border-l-4 border-l-[#fbbf24]">
                 <p className="text-gray-500 text-xs uppercase font-bold tracking-wider">Roblox</p>
                 <p className="text-2xl font-bold text-white mt-1">{stats.robloxPurchases}</p>
-            </Card>
-            <Card className="p-5 border-l-4 border-l-green-500">
-                <p className="text-gray-500 text-xs uppercase font-bold tracking-wider">Revenue</p>
-                <p className="text-2xl font-bold text-white mt-1">${stats.totalRevenue.toFixed(2)}</p>
+                <p className="text-sm text-[#fbbf24] font-semibold mt-1">{stats.robloxRevenue.toLocaleString()} R$</p>
             </Card>
         </div>
 
@@ -498,7 +497,7 @@ export default function AdminPage() {
                                     </td>
                                     <td className="p-4 text-right">
                                         <Link 
-                                          href={`/success?orderId=${p.transaction_id}&tier=${p.tier}&amount=${p.amount}&currency=${p.currency}&key=${key}&email=${p.payer_email || ''}&payerId=${p.payer_email || ''}&date=${p.created_at}&method=${p.currency === 'ROBUX' ? 'Robux' : 'PayPal'}`}
+                                          href={`/success?orderId=${p.transaction_id}&tier=${p.tier}&amount=${p.amount}&currency=${p.currency}&key=${key}&email=${p.payer_email || ''}&payerId=${p.payer_email || ''}&date=${p.created_at}&method=${p.currency === 'ROBUX' ? 'Robux' : 'PayPal'}&admin=1`}
                                           target="_blank"
                                         >
                                           <Button size="sm" variant="secondary" className="h-8 px-2 flex items-center justify-center gap-1">

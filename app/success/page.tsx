@@ -160,6 +160,7 @@ function GameSelectionModal({
 function SuccessContent() {
   const searchParams = useSearchParams();
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const isAdminView = searchParams.get('admin') === '1';
   const [gameModalDone, setGameModalDone] = useState(false);
 
   // Extract params and construct mock 'order' object to match client page structure
@@ -218,7 +219,7 @@ function SuccessContent() {
   return (
     <div className="min-h-screen py-10 px-4 flex items-center justify-center animate-fade-in">
         {/* Required Game Selection Modal — shown over blurred content until user confirms */}
-        {!gameModalDone && orderId && (
+        {!isAdminView && !gameModalDone && orderId && (
           <GameSelectionModal
             orderId={orderId}
             onDone={() => setGameModalDone(true)}
@@ -226,7 +227,7 @@ function SuccessContent() {
         )}
 
         {/* Order content — blurred & non-interactive until game selection is done */}
-        <div className={`max-w-5xl w-full space-y-8 transition-all duration-300 ${!gameModalDone ? 'blur-sm pointer-events-none select-none' : ''}`}>
+        <div className={`max-w-5xl w-full space-y-8 transition-all duration-300 ${!isAdminView && !gameModalDone ? 'blur-sm pointer-events-none select-none' : ''}`}>
             {/* Header Section */}
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
                 <div>

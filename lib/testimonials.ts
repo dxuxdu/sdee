@@ -183,6 +183,38 @@ const GENERIC_REVIEWS = [
 
 export async function getRecentTestimonials(): Promise<TestimonialData[]> {
   try {
+    // Fetch real user-submitted reviews (include those with content OR game selection)
+    const { data: realReviews } = await supabase
+      .from('reviews')
+      .select('display_name, email, rating, content, game, created_at')
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    const realTestimonials: TestimonialData[] = (realReviews || [])
+      .filter(r => (r.content && r.content.trim().length > 0) || r.game)
+      .map(r => {
+        const seed = r.email || r.display_name || r.created_at;
+        let authorName = 'Verified User';
+        if (r.display_name) {
+          authorName = r.display_name;
+        } else if (r.email) {
+          authorName = maskEmail(r.email);
+        }
+        // Use written content if available, otherwise generate a short one from game
+        const content = r.content?.trim() ||
+          (r.game ? `Great script for ${r.game}. Highly recommended!` : null);
+        if (!content) return null;
+        return {
+          content,
+          author: authorName,
+          role: r.game ? r.game : 'Premium Member',
+          avatar: `https://api.dicebear.com/7.x/avataaars/svg?seed=${seed}`,
+          rating: r.rating,
+          highlight: r.rating >= 5,
+        };
+      })
+      .filter(Boolean) as TestimonialData[];
+
     const { data: payments, error } = await supabase
       .from('payments')
       .select('payer_email, tier, created_at, roblox_username')
@@ -193,11 +225,11 @@ export async function getRecentTestimonials(): Promise<TestimonialData[]> {
 
     if (error) {
       console.error('Error fetching testimonials:', error);
-      return [];
+      return realTestimonials;
     }
 
     if (!payments || payments.length === 0) {
-      return [];
+      return realTestimonials;
     }
 
     const scripts = await fetchScripts();
@@ -234,7 +266,7 @@ export async function getRecentTestimonials(): Promise<TestimonialData[]> {
     let genericPointer = 0;
     let featureTemplatePointer = 0;
 
-    return payments
+    const generatedTestimonials = payments
       .filter(p => {
         const hasEmail = p.payer_email && p.payer_email !== 'EMPTY';
         const hasRoblox = !!p.roblox_username;
@@ -308,6 +340,12 @@ export async function getRecentTestimonials(): Promise<TestimonialData[]> {
           highlight: false 
         };
       });
+
+    // Merge: real reviews first, pad with generated ones only up to 60 total
+    const MIN_TOTAL = 60;
+    const needed = Math.max(0, MIN_TOTAL - realTestimonials.length);
+    const paddingTestimonials = generatedTestimonials.slice(0, needed);
+    return [...realTestimonials, ...paddingTestimonials];
 
   } catch (error) {
     console.error('Unexpected error fetching testimonials:', error);

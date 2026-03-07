@@ -28,18 +28,20 @@ export async function GET(req: NextRequest) {
         const stats = await db.getVisitorStats(); 
         
         // Calculate revenue stats
-        const totalRevenue = payments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
-        const paypalPurchases = payments.filter((p: any) => p.currency !== 'ROBUX').length;
-        const robloxPurchases = payments.filter((p: any) => p.currency === 'ROBUX').length;
+        const paypalPayments = payments.filter((p: any) => p.currency !== 'ROBUX');
+        const robloxPayments = payments.filter((p: any) => p.currency === 'ROBUX');
+        const paypalRevenue = paypalPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+        const robloxRevenue = robloxPayments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
 
         return NextResponse.json({ 
             success: true, 
             payments,
             stats: {
                 totalPurchases: payments.length,
-                paypalPurchases,
-                robloxPurchases,
-                totalRevenue
+                paypalPurchases: paypalPayments.length,
+                robloxPurchases: robloxPayments.length,
+                paypalRevenue,
+                robloxRevenue
             }
         });
 

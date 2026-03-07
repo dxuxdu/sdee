@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { LayoutDashboard, ShoppingBag, Download, Headset, LogOut } from 'lucide-react';
+import { LayoutDashboard, ShoppingBag, FileCode, Headset, LogOut } from 'lucide-react';
 import { useAuth } from '@/lib/client/auth'; // For logout
 
 export default function ClientHeader() {
@@ -12,7 +12,7 @@ export default function ClientHeader() {
   const navItems = [
     { href: '/client/dashboard', label: 'Home', icon: LayoutDashboard },
     { href: '/client/orders', label: 'Orders', icon: ShoppingBag },
-    { href: '/client/downloads', label: 'Downloads', icon: Download },
+    { href: '/client/downloads', label: 'Script', icon: FileCode },
     { href: '/client/support', label: 'Support', icon: Headset },
   ];
 
