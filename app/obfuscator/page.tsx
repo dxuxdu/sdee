@@ -116,7 +116,7 @@ export default function ObfuscatorPage() {
       }
 
       if (data.obfuscated) {
-        const watermark = "--[[ Seisen Obfuscator v1.0 | Protected by Seisen ]]\n";
+        const watermark = "--This file was protected by 9Fuscator [Prometheus Fork]\n";
         setObfuscatedCode(watermark + data.obfuscated);
       } else {
         throw new Error('Invalid response from server');
