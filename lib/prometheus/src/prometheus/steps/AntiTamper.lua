@@ -1,10 +1,3 @@
--- This Script is Part of the Prometheus Obfuscator by Levno_710
---
--- AntiTamper.lua (improved environment + anti-hook variant)
---
--- This Step adds strong environment validation + basic anti-debug/tamper checks.
--- It breaks / warns when run outside Roblox or under heavy modification/hooks.
-
 local Step = require("prometheus.step")
 local Ast = require("prometheus.ast")
 local Parser = require("prometheus.parser")
@@ -13,12 +6,11 @@ local logger = require("logger")
 
 local AntiTamper = Step:extend()
 
-AntiTamper.Description = "Adds Roblox environment validation + anti-hook/timing checks. Effective against many sandboxes, debuggers and basic tamper attempts."
-AntiTamper.Name = "Anti Tamper (improved)"
+AntiTamper.Description = "Strong Roblox environment validation + anti-hook/timing/metatable checks. Catches many sandboxes, debuggers, common exploit patterns."
+AntiTamper.Name = "Anti Tamper (improved 2026)"
 AntiTamper.SettingsDescriptor = {}
 
 function AntiTamper:init(settings)
-    -- No settings used in this version
 end
 
 function AntiTamper:apply(ast, pipeline)
@@ -28,93 +20,174 @@ function AntiTamper:apply(ast, pipeline)
     end
 
     local code = [[
-do
-    local function isTampered()
-        -- 1. Basic Roblox env presence
-        if typeof == nil or typeof(game) ~= "Instance" or game.ClassName ~= "DataModel" then
-            return true
-        end
+        do
+            local function isTampered()
+                if typeof == nil 
+                    or typeof(game) ~= "Instance" 
+                    or game.ClassName ~= "DataModel" then
+                    return true
+                end
 
-        -- 2. Service enumeration / hook check
-        local ok, rs = pcall(game.GetService, game, "RunService")
-        if not ok or typeof(rs) ~= "Instance" or rs.ClassName ~= "RunService" then
-            return true
-        end
+                local services = {
+                    {"RunService",   "RunService"},
+                    {"Players",      "Players"},
+                    {"ReplicatedStorage", "ReplicatedStorage"},
+                    {"HttpService",  "HttpService"},
+                    {"TweenService", "TweenService"},
+                }
 
-        local ok2, ps = pcall(game.GetService, game, "Players")
-        if not ok2 or typeof(ps) ~= "Instance" or ps.ClassName ~= "Players" then
-            return true
-        end
+                for _, svc in ipairs(services) do
+                    local ok, inst = pcall(game.GetService, game, svc[1])
+                    if not ok 
+                        or typeof(inst) ~= "Instance" 
+                        or inst.ClassName ~= svc[2] then
+                        return true
+                    end
+                end
 
-        -- 3. Heartbeat timing + hook detection (many exploits delay or skip heartbeats)
-        local heartbeat = rs.Heartbeat
-        local count = 0
-        local conn
-        local start = os.clock()
+                local rs = game:GetService("RunService")
+                local heartbeat = rs.Heartbeat
+                local samples = {}
+                local conn
+                local startGlobal = os.clock()
 
-        conn = heartbeat:Connect(function()
-            count = count + 1
-            if count >= 4 then
-                conn:Disconnect()
+                local count = 0
+                conn = heartbeat:Connect(function()
+                    count = count + 1
+                    table.insert(samples, os.clock() - startGlobal)
+                    if count >= 7 then
+                        conn:Disconnect()
+                    end
+                end)
+
+                local waited = 0
+                local maxWait = 0.45
+                while waited < maxWait and count < 7 do
+                    task.wait(0.06)
+                    waited = os.clock() - startGlobal
+                end
+
+                if conn and conn.Connected then conn:Disconnect() end
+
+                if count < 5 then
+                    return true
+                end
+
+                local deltas = {}
+                for i = 2, #samples do
+                    table.insert(deltas, samples[i] - samples[i-1])
+                end
+
+                local avg = 0
+                for _, d in ipairs(deltas) do avg = avg + d end
+                avg = avg / #deltas
+
+                local variance = 0
+                for _, d in ipairs(deltas) do
+                    variance = variance + (d - avg) ^ 2
+                end
+                variance = variance / #deltas
+
+                if avg > 0.085 or variance > 0.004 then
+                    return true
+                end
+
+                local testStr = "a:b:c:123:xyz"
+                local parts = {}
+                for p in string.gmatch(testStr, "([^:]+)") do
+                    table.insert(parts, p)
+                end
+                if #parts ~= 5 or parts[4] ~= "123" then return true end
+
+                if string.find(testStr, "123") ~= 11 then return true end
+                if string.match(testStr, "%d+") ~= "123" then return true end
+
+                if getrenv == nil or type(getrenv) ~= "function" 
+                    or getgc == nil or type(getgc) ~= "function"
+                    or gethui == nil or type(gethui) ~= "function" then
+                    return true
+                end
+
+                local function isLocked(t)
+                    local mt = getrawmetatable(t)
+                    if not mt then return false end
+                    return rawget(mt, "__metatable") ~= nil
+                end
+
+                if not isLocked(game) 
+                    or not isLocked(game:GetService("RunService"))
+                    or not isLocked(_G) then
+                    return true
+                end
+
+                local ok, name = pcall(function()
+                    return game.Name
+                end)
+                if not ok or name ~= "game" then
+                    return true
+                end
+
+                return false
             end
-        end)
 
-        -- Wait ~0.2-0.3s real time (os.clock is process CPU time â†’ affected by heavy hooks/debug)
-        local waited = 0
-        while waited < 0.25 and count < 4 do
-            task.wait(0.06)
-            waited = os.clock() - start
+            if isTampered() then
+                warn("DETECTED by @esdeekid")
+                print[[
+I'm floatin' 'round 4 a.m.s
+Chillin' out in estate kens
+That summer-spring collection just got bagged
+You're still on the same trends
+I'm the same kid with the same friends
+Posted up in the same ends
+Ridin' 'round in that A-Benz
+I got VVS, you got fake gems
+Lad, I burst through like a rhino (rhino)
+Smoked out, no pyro (pyro)
+Keep a mask up on me face, kid
+And it's all black, gotta lie low (lie low)
+Drugs white, albino ('bino)
+If you know, then I know (I know)
+Where did all of that time go?
+I see pyramids, no Cairo (Cairo)
+I'm bold (bold), I'm eager (eager)
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣴⢶⣾⣯⠿⠾⠿⢿⡷⣦⣤⣤⣄⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⢨⢊⣿⠏⣰⣿⣿⣿⣿⠆⣸⠇⣼⣁⣬⣙⢿⣷⠄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡣⡀⠌⣤⡦⢰⣿⣿⣿⣿⡿⢀⣿⠀⣯⡙⠿⠿⢸⠨⣯⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣸⠃⡼⢸⣿⣧⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣤⣤⣼⡀⡇⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣍⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣯⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠰⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡅⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢹⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠠⢿⣿⣿⣿⣿⣿⣟⡉⠁⠀⠀⠀⠀⢩⣿⣿⣿⣿⣿⣿⣿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣾⣿⣿⣿⣿⠿⣿⢻⣶⡄⠀⠀⠀⠩⠽⠻⠔⠛⠉⢙⣿⣿⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣽⣿⣿⣏⣹⣉⠀⠘⠃⠁⠀⠀⢀⣀⣀⣤⣶⣾⣿⣿⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡿⣿⣛⣻⣿⡿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡌⣿⣿⣿⣿⣿⣿⣿⣿⣯⣿⣯⣿⢿⣟⣿⣿⣿⢿⣿⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣷⡜⣿⣿⣿⣿⣿⢯⣿⣯⣭⡿⢿⣿⣛⣿⣽⣿⣿⡏⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⠓⠹⣿⣿⣿⣿⣿⣿⠿⣿⣿⣻⣻⣽⣿⡿⣛⣿⡀⢻⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣴⣾⣿⣆⢀⣹⣿⣿⣿⣿⣿⣿⣻⣿⣿⡿⢿⣻⣛⣿⣿⡃⢸⣿⣷⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣾⣿⣿⣿⡿⠃⡈⠻⣿⣻⣿⠾⠿⣿⣭⢽⠿⡿⣛⣿⣿⣿⣿⣟⣿⣿⣿⣿⣷⡄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣤⣿⣿⣿⣿⣿⣥⣤⡔⢤⣿⣿⣿⣿⣿⣷⣷⣾⣾⣛⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⣤⣴⣾⣿⣿⣿⣿⣿⣿⣿⡇⡜⠂⠈⠛⣿⣿⣿⣿⣾⣿⣯⣽⣷⣿⣿⣿⣾⡟⠀⠀⣿⣿⣿⣿⣿⣿⣷⣦⠀⠀⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⢀⣠⣴⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡟⠀⣠⣴⣷⣿⣿⣿⣿⣯⣿⣞⣻⣿⣿⣿⣿⡿⣡⡀⠀⠻⣿⣿⣿⣿⣿⣿⣿⣿⣷⣤⣀⠀⠀⠀⠀⠀
+⠀⠀⢀⣰⣾⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣧⣾⣿⣿⣿⣿⣿⣿⣾⢯⣿⢿⣻⡿⣫⣿⡟⠁⠻⣿⠦⠀⢸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣶⣄⠀⠀
+⠀⢠⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣟⢿⣿⣿⣻⣿⢯⣿⣿⣄⠀⠛⠀⠀⣼⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⡄⠀
+⠠⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠽⠿⠿⠿⠮⠿⠾⠻⠿⠿⠿⠿⠿⠷⠀⠀⠠⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠿⠄
+                ]]
+                while true do
+                    task.wait(4 + math.random(1,8)/10)
+                end
+            end
         end
-
-        local reached = (count >= 3)
-
-        -- Clean up
-        if conn.Connected then conn:Disconnect() end
-
-        if not reached then
-            return true  -- too slow / hooked / no heartbeat
-        end
-
-        -- 4. Extra cheap string function integrity (many exploits hook gmatch / gsub)
-        local testStr = "test:123:abc"
-        local parts = {}
-        for part in string.gmatch(testStr, "([^:]+)") do
-            table.insert(parts, part)
-        end
-        if #parts ~= 3 or parts[2] ~= "123" then
-            return true
-        end
-
-        -- 5. getrenv / getgc basic presence (some exploits mess with these)
-        if getrenv == nil or type(getrenv) ~= "function" or getgc == nil then
-            return true
-        end
-
-        return false  -- looks clean
-    end
-
-    local tampered = isTampered()
-
-    if tampered then
-        warn("skid")
-        -- Infinite annoying loop (can be made worse with math.random junk)
-        while true do
-            task.wait(9e9)
-        end
-    else
-        print("rest in peace my granny she got hit by a bazooka")
-    end
-end
-]]
+    ]]
 
     local parser = Parser:new({LuaVersion = Enums.LuaVersion.Lua51})
     local parsed = parser:parse(code)
-
     local doBlock = parsed.body.statements[1]
-    -- Link scope so variables don't conflict with rest of script
+
     doBlock.body.scope:setParent(ast.body.scope)
 
-    -- Insert right at the beginning
     table.insert(ast.body.statements, 1, doBlock)
 
     return ast
